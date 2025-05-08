@@ -7,6 +7,8 @@ void main() {
   runApp(const MyApp());
 }
 
+enum GroupMode { folders, months }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -18,11 +20,91 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const ReviewGalleryPage(),
+      home: const GroupSelectionPage(),
     );
   }
 }
 
+// Pantalla 1: elegir cómo agrupar imágenes
+class GroupSelectionPage extends StatelessWidget {
+  const GroupSelectionPage({super.key});
+
+  void _navigate(BuildContext context, GroupMode mode) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SelectionPage(groupMode: mode),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('¿Cómo quieres agrupar las imágenes?')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => _navigate(context, GroupMode.folders),
+                icon: const Icon(Icons.folder),
+                label: const Text('Por carpetas'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _navigate(context, GroupMode.months),
+                icon: const Icon(Icons.calendar_month),
+                label: const Text('Por meses'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Pantalla 2: selección de carpeta o mes (a implementar)
+class SelectionPage extends StatelessWidget {
+  final GroupMode groupMode;
+
+  const SelectionPage({super.key, required this.groupMode});
+
+  void _proceed(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReviewGalleryPage()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = groupMode == GroupMode.folders
+        ? 'Selecciona una carpeta'
+        : 'Selecciona un mes';
+
+    return Scaffold(
+      appBar: AppBar(title: Text(label)),
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () => _proceed(context),
+          child: const Text("Continuar con ejemplo"),
+        ),
+      ),
+    );
+  }
+}
+
+// Pantalla 3: revisión imagen por imagen
 class ReviewGalleryPage extends StatefulWidget {
   const ReviewGalleryPage({super.key});
 
@@ -156,6 +238,7 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
   }
 }
 
+// Pantalla 4: confirmación de imágenes eliminadas
 class ConfirmDeletePage extends StatelessWidget {
   final List<AssetEntity> images;
 
@@ -169,11 +252,12 @@ class ConfirmDeletePage extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Imágenes eliminadas correctamente.")),
       );
-      Navigator.pop(context); // Volver al inicio
+      Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text("No se pudieron eliminar ${failed.length} imágenes.")),
+          content: Text("No se pudieron eliminar ${failed.length} imágenes."),
+        ),
       );
     }
   }
