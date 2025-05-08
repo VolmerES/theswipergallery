@@ -5,10 +5,7 @@ import 'package:photo_manager/photo_manager.dart';
 class ReviewGalleryPage extends StatefulWidget {
   final List<AssetEntity> initialImages;
 
-  const ReviewGalleryPage({
-    super.key,
-    required this.initialImages,
-  });
+  const ReviewGalleryPage({super.key, required this.initialImages});
 
   @override
   State<ReviewGalleryPage> createState() => _ReviewGalleryPageState();
@@ -41,15 +38,83 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
         curve: Curves.easeInOut,
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Revisión completada')),
-      );
-      Navigator.pop(context); // o ir a pantalla de confirmación
+      _processDeletedImages();
     }
   }
 
+  Future<void> _processDeletedImages() async {
+    if (_toDelete.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Revisión completada, no hay imágenes para eliminar'),
+        ),
+      );
+      Navigator.pop(context);
+      return;
+    }
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Eliminando imágenes...'),
+            ],
+          ),
+        );
+      },
+    );
+
+    // Delete the images
+    List<String> failedDeletes = [];
+    for (var asset in _toDelete) {
+      try {
+        final List<String> result = await PhotoManager.editor.deleteWithIds([
+          asset.id,
+        ]);
+        if (result.isNotEmpty) {
+          failedDeletes.addAll(result);
+        }
+      } catch (e) {
+        failedDeletes.add(asset.id);
+      }
+    }
+
+    // Close the loading dialog
+    Navigator.pop(context);
+
+    // Show result message
+    if (failedDeletes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${_toDelete.length} imágenes eliminadas con éxito'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudieron eliminar ${failedDeletes.length} imágenes',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+
+    Navigator.pop(context, _toDelete.length - failedDeletes.length);
+  }
+
   Future<Widget> _buildImage(AssetEntity entity) async {
-    final thumb = await entity.thumbnailDataWithSize(const ThumbnailSize(800, 800));
+    final thumb = await entity.thumbnailDataWithSize(
+      const ThumbnailSize(800, 800),
+    );
     if (thumb == null) return const Center(child: Text("No disponible"));
     return Image.memory(thumb, fit: BoxFit.contain);
   }
@@ -57,9 +122,7 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
   @override
   Widget build(BuildContext context) {
     if (_images.isEmpty) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/custom_button.dart';
-import 'select_album_screen.dart';
+import './select_album_screen.dart';
 import 'select_month_screen.dart';
 
 enum GroupMode { folders, months }

@@ -28,7 +28,10 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
 
     final albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
-      filterOption: FilterOptionGroup()..addOrderOption(const OrderOption(type: OrderOptionType.createDate, asc: false)),
+      filterOption:
+          FilterOptionGroup()..addOrderOption(
+            const OrderOption(type: OrderOptionType.createDate, asc: false),
+          ),
     );
 
     setState(() {
@@ -43,7 +46,8 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
   }
 
   void _openAlbum(BuildContext context, AssetPathEntity album) async {
-    final images = await album.getAssetListPaged(page: 0, size: 100);
+    final count = await album.assetCountAsync;
+    final images = await album.getAssetListRange(start: 0, end: count);
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -53,16 +57,13 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
   }
 
   Future<int> _getAssetCount(AssetPathEntity album) async {
-    final assets = await album.getAssetListPaged(page: 0, size: 1);
-    return assets.length; // Conteo de fotos en el álbum
+    return album.assetCountAsync;
   }
 
   @override
   Widget build(BuildContext context) {
     if (_albums.isEmpty) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -92,7 +93,8 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
                     subtitle: FutureBuilder<int>(
                       future: _getAssetCount(album),
                       builder: (context, countSnapshot) {
-                        if (countSnapshot.connectionState == ConnectionState.done &&
+                        if (countSnapshot.connectionState ==
+                                ConnectionState.done &&
                             countSnapshot.hasData) {
                           return Text("${countSnapshot.data} fotos");
                         } else {
@@ -101,9 +103,12 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
                       },
                     ),
                   ),
-                  child: thumb != null
-                      ? Image.memory(thumb, fit: BoxFit.cover)
-                      : const Center(child: Icon(Icons.photo_album, size: 48)),
+                  child:
+                      thumb != null
+                          ? Image.memory(thumb, fit: BoxFit.cover)
+                          : const Center(
+                            child: Icon(Icons.photo_album, size: 48),
+                          ),
                 ),
               );
             },
