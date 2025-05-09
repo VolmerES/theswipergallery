@@ -1,7 +1,6 @@
 package com.example.theswipergallery
 
 import android.content.Intent
-import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -13,6 +12,8 @@ import io.flutter.plugins.GeneratedPluginRegistrant
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.example.theswipergallery/delete"
+    private var pendingResult: MethodChannel.Result? = null
+    private val REQUEST_DELETE_PERMISSION = 0
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -23,20 +24,21 @@ class MainActivity: FlutterActivity() {
                     if (uriString != null) {
                         try {
                             val uri = Uri.parse(uriString)
+                            pendingResult = result
+                            
                             // On Android 11+ use trash/delete request
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                 val uris = listOf(uri)
                                 val req = MediaStore.createTrashRequest(contentResolver, uris, true)
                                 startIntentSenderForResult(
                                     req.intentSender,
-                                    0,     // requestCode
+                                    REQUEST_DELETE_PERMISSION,
                                     null,  // fillInIntent
                                     0,     // flagsMask
                                     0,     // flagsValues
-                                    0,     // extraFlags
-                                    null   // options
+                                    0      // extraFlags
                                 )
-                                result.success(true)
+                                // No definimos el resultado aquí, lo haremos en onActivityResult
                             } else {
                                 // Fallback: direct delete via ContentResolver
                                 val rows = contentResolver.delete(uri, null, null)
@@ -53,6 +55,17 @@ class MainActivity: FlutterActivity() {
                     result.notImplemented()
                 }
             }
-        GeneratedPluginRegistrant.registerWith(flutterEngine)
+    }
+    
+    // Manejar el resultado de la solicitud de eliminación
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        if (requestCode == REQUEST_DELETE_PERMISSION) {
+            // Validamos el resultado del intent de eliminación
+            val success = resultCode == RESULT_OK
+            pendingResult?.success(success)
+            pendingResult = null
+        }
     }
 }

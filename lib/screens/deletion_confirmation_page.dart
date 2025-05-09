@@ -49,8 +49,8 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
                   borderRadius: BorderRadius.circular(8.0),
                   child: FutureBuilder<Uint8List?>(
                     future: asset.thumbnailDataWithSize(
-                      ThumbnailSize(200, 200),
-                    ), // wrap in ThumbnailSize
+                      const ThumbnailSize(200, 200),
+                    ),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return Container(
@@ -145,8 +145,10 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
       return;
     }
 
-    // Delete via system dialog
+    // Delete via native method
     List<String> failedDeletes = [];
+    int successCount = 0;
+    
     for (var asset in widget.imagesToDelete) {
       try {
         final file = await asset.file;
@@ -155,24 +157,29 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
           final success = await _channel.invokeMethod<bool>('delete', {
             'uri': uri,
           });
-          if (success != true) {
-            failedDeletes.add(asset.id);
-            print('System delete declined for asset: ${asset.id}');
+          
+          if (success == true) {
+            successCount++;
+            print('Eliminado con éxito el asset: ${asset.id}');
           } else {
-            print('Delete dialog shown for asset: ${asset.id}');
+            failedDeletes.add(asset.id);
+            print('No se pudo eliminar el asset: ${asset.id}');
           }
         } else {
           failedDeletes.add(asset.id);
+          print('No se pudo obtener el archivo para el asset: ${asset.id}');
         }
       } catch (e) {
-        print('Error invoking system delete for ${asset.id}: $e');
+        print('Error eliminando ${asset.id}: $e');
         failedDeletes.add(asset.id);
       }
     }
 
+    // Refrescar la galería para que refleje los cambios
+    await PhotoManager.clearFileCache();
+
     // Show result message if still mounted
     if (mounted) {
-      final successCount = widget.imagesToDelete.length - failedDeletes.length;
       if (failedDeletes.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
