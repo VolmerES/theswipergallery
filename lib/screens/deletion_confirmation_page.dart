@@ -1,13 +1,15 @@
 import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:flutter/services.dart';
 
 class DeletionConfirmationPage extends StatefulWidget {
   final List<AssetEntity> imagesToDelete;
 
-  const DeletionConfirmationPage({Key? key, required this.imagesToDelete})
-      : super(key: key);
+  const DeletionConfirmationPage({
+    Key? key,
+    required this.imagesToDelete,
+  }) : super(key: key);
 
   @override
   State<DeletionConfirmationPage> createState() =>
@@ -15,207 +17,113 @@ class DeletionConfirmationPage extends StatefulWidget {
 }
 
 class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
-  static const MethodChannel _channel = MethodChannel(
-    'com.example.theswipergallery/delete',
-  );
   bool _isDeleting = false;
+
+  Future<void> _deleteImages() async {
+    setState(() => _isDeleting = true);
+
+    // 1. Verificar permiso de lectura (total o limitado)
+    final ps = await PhotoManager.requestPermissionExtend();
+    if (!ps.isAuth && !ps.hasAccess) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sin permiso para acceder a las fotos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      setState(() => _isDeleting = false);
+      return;
+    }
+
+    try {
+      // 2. Delegar en PhotoManager para borrar
+      final ids = widget.imagesToDelete.map((e) => e.id).toList();
+      // En Android 11+ invocará el diálogo nativo de confirmación de borrado
+      final failed = await PhotoManager.editor.deleteWithIds(ids);
+
+      // 3. Limpiar caché interno
+      await PhotoManager.clearFileCache();
+
+      if (!mounted) return;
+
+      // 4. Mostrar resultado y regresar
+      if (failed.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Imágenes enviadas a la papelera'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudieron eliminar ${failed.length} imágenes'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        setState(() => _isDeleting = false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al borrar: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      setState(() => _isDeleting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Confirmar eliminación")),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              "Has seleccionado ${widget.imagesToDelete.length} imágenes para eliminar",
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(8.0),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 8.0,
-                mainAxisSpacing: 8.0,
-              ),
-              itemCount: widget.imagesToDelete.length,
-              itemBuilder: (context, index) {
-                final asset = widget.imagesToDelete[index];
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(8.0),
-                  child: FutureBuilder<Uint8List?>(
-                    future: asset.thumbnailDataWithSize(
-                      const ThumbnailSize(200, 200),
-                    ),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Container(
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      }
-                      if (snapshot.hasData && snapshot.data != null) {
-                        return Image.memory(snapshot.data!, fit: BoxFit.cover);
-                      }
-                      return Container(
-                        color: Colors.grey[300],
-                        child: const Icon(
-                          Icons.broken_image,
-                          color: Colors.grey,
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      appBar: AppBar(title: const Text('Confirmar borrado')),
+      body: _isDeleting
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
               children: [
-                ElevatedButton(
-                  onPressed: _isDeleting ? null : () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
-                  child: const Text("Cancelar"),
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(4),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            mainAxisSpacing: 4,
+                            crossAxisSpacing: 4),
+                    itemCount: widget.imagesToDelete.length,
+                    itemBuilder: (_, i) => FutureBuilder<Uint8List?>(
+                      future: widget.imagesToDelete[i]
+                          .thumbnailDataWithSize(const ThumbnailSize(200, 200)),
+                      builder: (_, snap) {
+                        final b = snap.data;
+                        return b != null
+                            ? Image.memory(b, fit: BoxFit.cover)
+                            : Container(color: Colors.grey[300]);
+                      },
+                    ),
+                  ),
                 ),
-                ElevatedButton(
-                  onPressed: _isDeleting ? null : _deleteImages,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: _isDeleting
-                      ? const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Text("Eliminando..."),
-                          ],
-                        )
-                      : const Text("Confirmar eliminación"),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ElevatedButton.icon(
+                    onPressed: _deleteImages,
+                    icon: const Icon(Icons.delete_forever),
+                    label: Text(
+                      _isDeleting
+                          ? 'Procesando...'
+                          : 'Borrar ${widget.imagesToDelete.length}',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
     );
-  }
-
-  Future<void> _deleteImages() async {
-    setState(() {
-      _isDeleting = true;
-    });
-
-    try {
-      final hasPermission = await PhotoManager.requestPermissionExtend();
-      if (!hasPermission.hasAccess) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No se tienen permisos para eliminar imágenes'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          setState(() {
-            _isDeleting = false;
-          });
-        }
-        return;
-      }
-
-      List<String> failedDeletes = [];
-      int successCount = 0;
-
-      for (var asset in widget.imagesToDelete) {
-        try {
-          final file = await asset.file;
-          if (file != null) {
-            final uri = file.uri.toString();
-            debugPrint('Intentando eliminar URI: $uri');
-
-            final success = await _channel.invokeMethod<bool>('delete', {
-              'uri': uri,
-            });
-
-            if (success == true) {
-              successCount++;
-              debugPrint('Eliminado con éxito el asset: ${asset.id}');
-            } else {
-              failedDeletes.add(asset.id);
-              debugPrint('No se pudo eliminar el asset: ${asset.id}');
-            }
-          } else {
-            failedDeletes.add(asset.id);
-            debugPrint('No se pudo obtener el archivo para el asset: ${asset.id}');
-          }
-        } catch (e) {
-          debugPrint('Error eliminando ${asset.id}: $e');
-          failedDeletes.add(asset.id);
-        }
-      }
-
-      await PhotoManager.clearFileCache();
-
-      if (mounted) {
-        if (failedDeletes.isEmpty && successCount > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$successCount imágenes eliminadas con éxito'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pop(context, successCount);
-        } else if (successCount > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Se eliminaron $successCount imágenes. No se pudieron eliminar ${failedDeletes.length} imágenes',
-              ),
-              backgroundColor: Colors.orange,
-            ),
-          );
-          Navigator.pop(context, successCount);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No se pudo eliminar ninguna imagen. Verifica los permisos de la aplicación',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-          setState(() {
-            _isDeleting = false;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error general: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() {
-          _isDeleting = false;
-        });
-      }
-    }
   }
 }
