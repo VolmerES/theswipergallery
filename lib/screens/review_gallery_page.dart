@@ -15,21 +15,18 @@ class ReviewGalleryPage extends StatefulWidget {
 class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
   late List<AssetEntity> _images;
   List<AssetEntity> _toDelete = [];
-  final PageController _pageController = PageController();
   int _currentIndex = 0;
 
-  // Variables para la animación de swipe
   double _dragPosition = 0;
   bool _isDragging = false;
-  double _dragThreshold = 100.0;
+  final double _dragThreshold = 100.0;
 
-  // Cache de imágenes
   final Map<int, Future<Uint8List?>> _imageCache = {};
 
   @override
   void initState() {
     super.initState();
-    _images = widget.initialImages;
+    _images = List.of(widget.initialImages);
     _precacheImage(_currentIndex);
   }
 
@@ -43,7 +40,20 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
     }
   }
 
-  void _handleKeep() => _nextImage();
+  void _handleKeep() {
+    setState(() {
+      if (_currentIndex < _images.length - 1) {
+        _currentIndex++;
+        _dragPosition = 0;
+        _isDragging = false;
+        _precacheImage(_currentIndex);
+      } else {
+        _dragPosition = 0;
+        _isDragging = false;
+        _processDeletedImages();
+      }
+    });
+  }
 
   void _handleDelete() {
     final toRemove = _images[_currentIndex];
@@ -51,6 +61,8 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
 
     setState(() {
       _images.removeAt(_currentIndex);
+      _imageCache.remove(_currentIndex);
+
       if (_currentIndex >= _images.length) {
         _processDeletedImages();
       } else {
@@ -61,36 +73,7 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
     });
   }
 
-  void _handleUndo() {
-    setState(() {
-      if (_toDelete.isNotEmpty) {
-        _toDelete.removeLast();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Se ha restaurado la última imagen'),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      }
-    });
-  }
-
-  void _nextImage() {
-    setState(() {
-      if (_currentIndex < _images.length - 1) {
-        _currentIndex++;
-        _dragPosition = 0;
-        _isDragging = false;
-        _precacheImage(_currentIndex + 1);
-      } else {
-        _dragPosition = 0;
-        _isDragging = false;
-        _processDeletedImages();
-      }
-    });
-  }
-
-  Future<void> _processDeletedImages() async {
+  void _processDeletedImages() async {
     if (_toDelete.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -143,14 +126,10 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
 
   Color _getDragOverlayColor() {
     if (!_isDragging || _dragPosition == 0) return Colors.transparent;
-    if (_dragPosition > 0) {
-      double intensity = (_dragPosition / _dragThreshold).clamp(0.0, 1.0) * 0.3;
-      return Colors.green.withOpacity(intensity);
-    } else {
-      double intensity =
-          (-_dragPosition / _dragThreshold).clamp(0.0, 1.0) * 0.3;
-      return Colors.red.withOpacity(intensity);
-    }
+    final intensity = (_dragPosition.abs() / _dragThreshold).clamp(0.0, 1.0) * 0.3;
+    return _dragPosition > 0
+        ? Colors.green.withOpacity(intensity)
+        : Colors.red.withOpacity(intensity);
   }
 
   @override
