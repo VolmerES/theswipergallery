@@ -26,13 +26,15 @@ class MainActivity: FlutterActivity() {
                             // On Android 11+ use trash/delete request
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                 val uris = listOf(uri)
-                                val req = MediaStore.createTrashRequest(contentResolver, uris)
-                                startIntentSender(
+                                val req = MediaStore.createTrashRequest(contentResolver, uris, true)
+                                startIntentSenderForResult(
                                     req.intentSender,
+                                    0,     // requestCode
                                     null,  // fillInIntent
                                     0,     // flagsMask
                                     0,     // flagsValues
-                                    0      // extraFlags
+                                    0,     // extraFlags
+                                    null   // options
                                 )
                                 result.success(true)
                             } else {
