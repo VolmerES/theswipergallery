@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:flutter/services.dart';
 
 class DeletionConfirmationPage extends StatefulWidget {
   final List<AssetEntity> imagesToDelete;
@@ -14,6 +15,9 @@ class DeletionConfirmationPage extends StatefulWidget {
 }
 
 class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
+  static const MethodChannel _channel = MethodChannel(
+    'com.example.theswipergallery/delete',
+  );
   bool _isDeleting = false;
 
   @override
@@ -132,6 +136,8 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
             backgroundColor: Colors.red,
           ),
         );
+        // Llevar a ajustes para que el usuario habilite permisos
+        await PhotoManager.openSetting();
         setState(() {
           _isDeleting = false;
         });
@@ -139,19 +145,27 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
       return;
     }
 
-    // Delete the images
+    // Delete via system dialog
     List<String> failedDeletes = [];
     for (var asset in widget.imagesToDelete) {
       try {
-        final result = await PhotoManager.editor.deleteWithIds([asset.id]);
-        if (result.isNotEmpty) {
-          failedDeletes.addAll(result);
-          print('Failed to delete asset: ${asset.id}');
+        final file = await asset.file;
+        if (file != null) {
+          final uri = file.uri.toString();
+          final success = await _channel.invokeMethod<bool>('delete', {
+            'uri': uri,
+          });
+          if (success != true) {
+            failedDeletes.add(asset.id);
+            print('System delete declined for asset: ${asset.id}');
+          } else {
+            print('Delete dialog shown for asset: ${asset.id}');
+          }
         } else {
-          print('Successfully deleted asset: ${asset.id}');
+          failedDeletes.add(asset.id);
         }
       } catch (e) {
-        print('Error deleting asset ${asset.id}: $e');
+        print('Error invoking system delete for ${asset.id}: $e');
         failedDeletes.add(asset.id);
       }
     }
