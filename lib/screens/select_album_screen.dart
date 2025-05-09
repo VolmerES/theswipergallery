@@ -94,12 +94,16 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
         if (_seenAssetIds.add(asset.id)) asset.id: asset,
     }.values.toList();
 
-    Navigator.push(
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ReviewGalleryPage(initialImages: images),
       ),
     );
+
+    if (result != null) {
+      _loadAlbums();
+    }
   }
 
   Future<int> _getAssetCount(AssetPathEntity album) async {

@@ -187,13 +187,17 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
                     builder: (context, snapshot) {
                       final thumb = snapshot.data;
                       return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
+                        onTap: () async {
+                          final result = await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => ReviewGalleryPage(initialImages: images),
                             ),
                           );
+
+                          if (result != null) {
+                            _loadImages();
+                          }
                         },
                         child: GridTile(
                           footer: GridTileBar(
