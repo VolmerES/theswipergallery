@@ -111,10 +111,13 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
 
     for (var asset in widget.imagesToDelete) {
       try {
+        final file = await asset.file;
+        if (file == null) continue;
+
         final uri = Uri.parse("content://media/external/images/media/${asset.id}");
         final success = await _channel.invokeMethod<bool>('delete', {
           'uri': uri.toString(),
-          'moveToTrash': true, // <- Aquí lo activamos
+          'moveToTrash': true,
         });
 
         if (success == true) {

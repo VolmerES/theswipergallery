@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'deletion_confirmation_page.dart'; // Add this import
+import 'deletion_confirmation_page.dart';
 
 class ReviewGalleryPage extends StatefulWidget {
   final List<AssetEntity> initialImages;
@@ -21,20 +21,18 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
   // Variables para la animación de swipe
   double _dragPosition = 0;
   bool _isDragging = false;
-  double _dragThreshold = 100.0; // Umbral para detectar swipe
+  double _dragThreshold = 100.0;
 
-  // Variables para cachear las imágenes
+  // Cache de imágenes
   final Map<int, Future<Uint8List?>> _imageCache = {};
 
   @override
   void initState() {
     super.initState();
     _images = widget.initialImages;
-    // Precarga la imagen actual
     _precacheImage(_currentIndex);
   }
 
-  // Método para precachear imágenes
   void _precacheImage(int index) {
     if (!_imageCache.containsKey(index) &&
         index >= 0 &&
@@ -48,14 +46,24 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
   void _handleKeep() => _nextImage();
 
   void _handleDelete() {
-    _toDelete.add(_images[_currentIndex]);
-    _nextImage();
+    final toRemove = _images[_currentIndex];
+    _toDelete.add(toRemove);
+
+    setState(() {
+      _images.removeAt(_currentIndex);
+      if (_currentIndex >= _images.length) {
+        _processDeletedImages();
+      } else {
+        _dragPosition = 0;
+        _isDragging = false;
+        _precacheImage(_currentIndex);
+      }
+    });
   }
 
   void _handleUndo() {
     setState(() {
       if (_toDelete.isNotEmpty) {
-        // Quitar la última imagen de la lista de eliminación
         _toDelete.removeLast();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -68,17 +76,18 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
   }
 
   void _nextImage() {
-    if (_currentIndex < _images.length - 1) {
-      setState(() {
+    setState(() {
+      if (_currentIndex < _images.length - 1) {
         _currentIndex++;
         _dragPosition = 0;
         _isDragging = false;
-      });
-      // Precachear la siguiente imagen si existe
-      _precacheImage(_currentIndex + 1);
-    } else {
-      _processDeletedImages();
-    }
+        _precacheImage(_currentIndex + 1);
+      } else {
+        _dragPosition = 0;
+        _isDragging = false;
+        _processDeletedImages();
+      }
+    });
   }
 
   Future<void> _processDeletedImages() async {
@@ -92,25 +101,19 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
       return;
     }
 
-    // Navigate to confirmation page instead of directly deleting
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (context) => DeletionConfirmationPage(imagesToDelete: _toDelete),
+        builder: (context) =>
+            DeletionConfirmationPage(imagesToDelete: _toDelete),
       ),
     );
 
-    // Process the result
     if (result != null) {
-      Navigator.pop(
-        context,
-        result,
-      ); // Return the deletion result to previous screen
+      Navigator.pop(context, result);
     }
   }
 
-  // Método para manejar el swipe
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
     setState(() {
       _isDragging = true;
@@ -118,18 +121,12 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
     });
   }
 
-  // Método para finalizar el swipe
   void _onHorizontalDragEnd(DragEndDetails details) {
-    // Detectar swipe a la derecha (guardar)
     if (_dragPosition > _dragThreshold) {
       _handleKeep();
-    }
-    // Detectar swipe a la izquierda (eliminar)
-    else if (_dragPosition < -_dragThreshold) {
+    } else if (_dragPosition < -_dragThreshold) {
       _handleDelete();
-    }
-    // Si no alcanzó el umbral, resetear posición
-    else {
+    } else {
       setState(() {
         _dragPosition = 0;
         _isDragging = false;
@@ -137,7 +134,6 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
     }
   }
 
-  // Restablecer posición si se cancela el gesto
   void _onHorizontalDragCancel() {
     setState(() {
       _dragPosition = 0;
@@ -145,22 +141,15 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
     });
   }
 
-  // Método para determinar el color de tinte según la dirección del arrastre
   Color _getDragOverlayColor() {
     if (!_isDragging || _dragPosition == 0) return Colors.transparent;
-
-    // Swipe derecha (guardar) -> verde, Swipe izquierda (eliminar) -> rojo
     if (_dragPosition > 0) {
       double intensity = (_dragPosition / _dragThreshold).clamp(0.0, 1.0) * 0.3;
-      return Colors.green.withOpacity(
-        intensity,
-      ); // Corregido: verde para guardar (derecha)
+      return Colors.green.withOpacity(intensity);
     } else {
       double intensity =
           (-_dragPosition / _dragThreshold).clamp(0.0, 1.0) * 0.3;
-      return Colors.red.withOpacity(
-        intensity,
-      ); // Corregido: rojo para eliminar (izquierda)
+      return Colors.red.withOpacity(intensity);
     }
   }
 
@@ -170,7 +159,6 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // Precarga la imagen actual si no está en caché
     _precacheImage(_currentIndex);
 
     return Scaffold(
@@ -184,57 +172,48 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
               onHorizontalDragCancel: _onHorizontalDragCancel,
               child: Stack(
                 children: [
-                  // Mostrar imagen usando FutureBuilder y AnimatedBuilder para suavizar las transformaciones
                   FutureBuilder<Uint8List?>(
                     future: _imageCache[_currentIndex],
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.done &&
                           snapshot.hasData) {
-                        return AnimatedBuilder(
-                          animation: Listenable.merge(
-                            [],
-                          ), // Un truco para reconstruir solo cuando se llama a setState
-                          builder: (context, _) {
-                            return Transform.translate(
-                              offset: Offset(_dragPosition, 0),
-                              child: Transform.rotate(
-                                angle: _dragPosition / 1000,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(10),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.2),
-                                        spreadRadius: 2,
-                                        blurRadius: 10,
-                                      ),
-                                    ],
+                        return Transform.translate(
+                          offset: Offset(_dragPosition, 0),
+                          child: Transform.rotate(
+                            angle: _dragPosition / 1000,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    spreadRadius: 2,
+                                    blurRadius: 10,
                                   ),
-                                  margin: const EdgeInsets.all(10),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(10),
-                                        child: Image.memory(
-                                          snapshot.data!,
-                                          fit: BoxFit.contain,
-                                          gaplessPlayback:
-                                              true, // Evita parpadeos al cambiar de imagen
-                                        ),
-                                      ),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(10),
-                                        child: Container(
-                                          color: _getDragOverlayColor(),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                ],
                               ),
-                            );
-                          },
+                              margin: const EdgeInsets.all(10),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.memory(
+                                      snapshot.data!,
+                                      fit: BoxFit.contain,
+                                      gaplessPlayback: true,
+                                    ),
+                                  ),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Container(
+                                      color: _getDragOverlayColor(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         );
                       } else {
                         return const Center(child: CircularProgressIndicator());
@@ -252,30 +231,20 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color:
-                              _dragPosition > 0
-                                  ? Colors.green.withOpacity(
-                                    0.8,
-                                  ) // Corregido: verde para guardar (derecha)
-                                  : Colors.red.withOpacity(
-                                    0.8,
-                                  ), // Corregido: rojo para eliminar (izquierda)
+                          color: _dragPosition > 0
+                              ? Colors.green.withOpacity(0.8)
+                              : Colors.red.withOpacity(0.8),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
                             Icon(
-                              _dragPosition > 0
-                                  ? Icons.check
-                                  : Icons
-                                      .delete, // Corregido: iconos consistentes
+                              _dragPosition > 0 ? Icons.check : Icons.delete,
                               color: Colors.white,
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              _dragPosition > 0
-                                  ? "GUARDAR"
-                                  : "ELIMINAR", // Corregido: texto correcto
+                              _dragPosition > 0 ? "GUARDAR" : "ELIMINAR",
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -293,7 +262,8 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
               "${_currentIndex + 1} de ${_images.length}",
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
         ],

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'screens/home_screen.dart';
 
-
 void main() {
   runApp(const MyApp());
 }
@@ -179,7 +178,7 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
   }
 }
 
-/// Lógica de swipes para guardar o eliminar (igual que antes).
+/// Lógica de swipes para guardar o eliminar (corregido).
 class ReviewGalleryPage extends StatefulWidget {
   final List<AssetEntity> images;
   const ReviewGalleryPage({super.key, required this.images});
@@ -203,25 +202,30 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
 
   Future<void> _loadThumb() async {
     setState(() => _loading = true);
-    final d = await _imgs[_idx].thumbnailDataWithSize(const ThumbnailSize(600, 600));
-    if (!mounted) return;
-    setState(() {
-      _thumb = d;
-      _loading = false;
-    });
+    if (_idx < _imgs.length) {
+      final d = await _imgs[_idx].thumbnailDataWithSize(const ThumbnailSize(600, 600));
+      if (!mounted) return;
+      setState(() {
+        _thumb = d;
+        _loading = false;
+      });
+    }
   }
 
   void _swipe(bool delete) {
     if (delete) _toDelete.add(_imgs[_idx]);
-    if (_idx < _imgs.length - 1) {
-      setState(() => _idx++);
-      _loadThumb();
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => DeletePreviewPage(images: _toDelete)),
-      );
-    }
+
+    setState(() {
+      _imgs.removeAt(_idx);
+      if (_idx >= _imgs.length) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => DeletePreviewPage(images: _toDelete)),
+        );
+      } else {
+        _loadThumb();
+      }
+    });
   }
 
   @override
