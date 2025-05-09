@@ -33,12 +33,13 @@ class MainActivity: FlutterActivity() {
                                 Log.d("MainActivity", "Using MediaStore.createDeleteRequest for Android 11+")
                                 val uris = arrayListOf(uri)
                                 
-                                // IMPORTANTE: usamos createDeleteRequest en lugar de createTrashRequest
-                                val req = MediaStore.createDeleteRequest(contentResolver, uris)
-                                
                                 try {
+                                    // Intentamos obtener el Intent para eliminar
+                                    val pendingIntent = MediaStore.createDeleteRequest(contentResolver, uris)
+                                    
+                                    // Iniciamos la actividad que muestra el diálogo de confirmación al usuario
                                     startIntentSenderForResult(
-                                        req.intentSender,
+                                        pendingIntent.intentSender,
                                         REQUEST_DELETE_PERMISSION,
                                         null,  // fillInIntent
                                         0,     // flagsMask
@@ -50,6 +51,12 @@ class MainActivity: FlutterActivity() {
                                     Log.e("MainActivity", "Error al iniciar IntentSender: ${e.message}")
                                     result.error("DELETE_FAILED", "Error al iniciar el diálogo de confirmación: ${e.message}", null)
                                 }
+                            } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+                                // Para Android 10 (API 29)
+                                Log.d("MainActivity", "Using ContentResolver.delete for Android 10")
+                                val rows = contentResolver.delete(uri, null, null)
+                                Log.d("MainActivity", "Delete result: $rows rows affected")
+                                result.success(rows > 0)
                             } else {
                                 // Para versiones anteriores a Android 10
                                 Log.d("MainActivity", "Using ContentResolver.delete for older Android")

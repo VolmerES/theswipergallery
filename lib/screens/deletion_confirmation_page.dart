@@ -7,7 +7,7 @@ class DeletionConfirmationPage extends StatefulWidget {
   final List<AssetEntity> imagesToDelete;
 
   const DeletionConfirmationPage({Key? key, required this.imagesToDelete})
-    : super(key: key);
+      : super(key: key);
 
   @override
   State<DeletionConfirmationPage> createState() =>
@@ -82,36 +82,30 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton(
-                  onPressed:
-                      _isDeleting
-                          ? null
-                          : () {
-                            Navigator.pop(context); // Cancel and go back
-                          },
+                  onPressed: _isDeleting ? null : () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
                   child: const Text("Cancelar"),
                 ),
                 ElevatedButton(
                   onPressed: _isDeleting ? null : _deleteImages,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child:
-                      _isDeleting
-                          ? const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
+                  child: _isDeleting
+                      ? const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
                               ),
-                              SizedBox(width: 8),
-                              Text("Eliminando..."),
-                            ],
-                          )
-                          : const Text("Confirmar eliminación"),
+                            ),
+                            SizedBox(width: 8),
+                            Text("Eliminando..."),
+                          ],
+                        )
+                      : const Text("Confirmar eliminación"),
                 ),
               ],
             ),
@@ -126,13 +120,95 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
       _isDeleting = true;
     });
 
-    // Request permission before deleting
-    final hasPermission = await PhotoManager.requestPermissionExtend();
-    if (!hasPermission.hasAccess) {
+    try {
+      final hasPermission = await PhotoManager.requestPermissionExtend();
+      if (!hasPermission.hasAccess) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se tienen permisos para eliminar imágenes'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() {
+            _isDeleting = false;
+          });
+        }
+        return;
+      }
+
+      List<String> failedDeletes = [];
+      int successCount = 0;
+
+      for (var asset in widget.imagesToDelete) {
+        try {
+          final file = await asset.file;
+          if (file != null) {
+            final uri = file.uri.toString();
+            debugPrint('Intentando eliminar URI: $uri');
+
+            final success = await _channel.invokeMethod<bool>('delete', {
+              'uri': uri,
+            });
+
+            if (success == true) {
+              successCount++;
+              debugPrint('Eliminado con éxito el asset: ${asset.id}');
+            } else {
+              failedDeletes.add(asset.id);
+              debugPrint('No se pudo eliminar el asset: ${asset.id}');
+            }
+          } else {
+            failedDeletes.add(asset.id);
+            debugPrint('No se pudo obtener el archivo para el asset: ${asset.id}');
+          }
+        } catch (e) {
+          debugPrint('Error eliminando ${asset.id}: $e');
+          failedDeletes.add(asset.id);
+        }
+      }
+
+      await PhotoManager.clearFileCache();
+
+      if (mounted) {
+        if (failedDeletes.isEmpty && successCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$successCount imágenes eliminadas con éxito'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, successCount);
+        } else if (successCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Se eliminaron $successCount imágenes. No se pudieron eliminar ${failedDeletes.length} imágenes',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          Navigator.pop(context, successCount);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No se pudo eliminar ninguna imagen. Verifica los permisos de la aplicación',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() {
+            _isDeleting = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error general: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se tienen permisos para eliminar imágenes'),
+          SnackBar(
+            content: Text('Error: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -140,70 +216,6 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
           _isDeleting = false;
         });
       }
-      return;
-    }
-
-    // Delete via native method
-    List<String> failedDeletes = [];
-    int successCount = 0;
-    
-    for (var asset in widget.imagesToDelete) {
-      try {
-        final file = await asset.file;
-        if (file != null) {
-          final uri = file.uri.toString();
-          
-          // Registra la URI para depuración
-          debugPrint('Intentando eliminar URI: $uri');
-          
-          final success = await _channel.invokeMethod<bool>('delete', {
-            'uri': uri,
-          });
-          
-          if (success == true) {
-            successCount++;
-            debugPrint('Eliminado con éxito el asset: ${asset.id}');
-          } else {
-            failedDeletes.add(asset.id);
-            debugPrint('No se pudo eliminar el asset: ${asset.id}');
-          }
-        } else {
-          failedDeletes.add(asset.id);
-          debugPrint('No se pudo obtener el archivo para el asset: ${asset.id}');
-        }
-      } catch (e) {
-        debugPrint('Error eliminando ${asset.id}: $e');
-        failedDeletes.add(asset.id);
-      }
-    }
-
-    // Refrescar la galería para que refleje los cambios
-    await PhotoManager.clearFileCache();
-
-    // Show result message if still mounted
-    if (mounted) {
-      if (failedDeletes.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$successCount imágenes eliminadas con éxito'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Se eliminaron $successCount imágenes. No se pudieron eliminar ${failedDeletes.length} imágenes',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-
-      Navigator.pop(
-        context,
-        successCount,
-      ); // Return to previous screen with count
     }
   }
 }
