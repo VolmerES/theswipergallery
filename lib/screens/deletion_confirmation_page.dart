@@ -136,8 +136,6 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
             backgroundColor: Colors.red,
           ),
         );
-        // Llevar a ajustes para que el usuario habilite permisos
-        await PhotoManager.openSetting();
         setState(() {
           _isDeleting = false;
         });
@@ -154,23 +152,27 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
         final file = await asset.file;
         if (file != null) {
           final uri = file.uri.toString();
+          
+          // Registra la URI para depuración
+          debugPrint('Intentando eliminar URI: $uri');
+          
           final success = await _channel.invokeMethod<bool>('delete', {
             'uri': uri,
           });
           
           if (success == true) {
             successCount++;
-            print('Eliminado con éxito el asset: ${asset.id}');
+            debugPrint('Eliminado con éxito el asset: ${asset.id}');
           } else {
             failedDeletes.add(asset.id);
-            print('No se pudo eliminar el asset: ${asset.id}');
+            debugPrint('No se pudo eliminar el asset: ${asset.id}');
           }
         } else {
           failedDeletes.add(asset.id);
-          print('No se pudo obtener el archivo para el asset: ${asset.id}');
+          debugPrint('No se pudo obtener el archivo para el asset: ${asset.id}');
         }
       } catch (e) {
-        print('Error eliminando ${asset.id}: $e');
+        debugPrint('Error eliminando ${asset.id}: $e');
         failedDeletes.add(asset.id);
       }
     }
