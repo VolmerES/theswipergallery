@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'deletion_confirmation_page.dart'; // Add this import
 
 class ReviewGalleryPage extends StatefulWidget {
   final List<AssetEntity> initialImages;
@@ -91,81 +92,22 @@ class _ReviewGalleryPageState extends State<ReviewGalleryPage> {
       return;
     }
 
-    // Show loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return const AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Eliminando imágenes...'),
-            ],
-          ),
-        );
-      },
+    // Navigate to confirmation page instead of directly deleting
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => DeletionConfirmationPage(imagesToDelete: _toDelete),
+      ),
     );
 
-    // Request permission before deleting
-    final hasPermission = await PhotoManager.requestPermissionExtend();
-    if (!hasPermission.hasAccess) {
-      // Close the loading dialog
-      Navigator.pop(context);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se tienen permisos para eliminar imágenes'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      Navigator.pop(context, 0);
-      return;
+    // Process the result
+    if (result != null) {
+      Navigator.pop(
+        context,
+        result,
+      ); // Return the deletion result to previous screen
     }
-
-    // Delete the images
-    List<String> failedDeletes = [];
-    for (var asset in _toDelete) {
-      try {
-        final result = await PhotoManager.editor.deleteWithIds([asset.id]);
-        if (result.isNotEmpty) {
-          failedDeletes.addAll(result);
-          print('Failed to delete asset: ${asset.id}');
-        } else {
-          print('Successfully deleted asset: ${asset.id}');
-        }
-      } catch (e) {
-        print('Error deleting asset ${asset.id}: $e');
-        failedDeletes.add(asset.id);
-      }
-    }
-
-    // Close the loading dialog
-    Navigator.pop(context);
-
-    // Show result message
-    final successCount = _toDelete.length - failedDeletes.length;
-    if (failedDeletes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$successCount imágenes eliminadas con éxito'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Se eliminaron $successCount imágenes. No se pudieron eliminar ${failedDeletes.length} imágenes',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
-
-    Navigator.pop(context, successCount);
   }
 
   // Método para manejar el swipe
