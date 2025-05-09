@@ -18,63 +18,78 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-            .setMethodCallHandler { call, result ->
-                if (call.method == "delete") {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "delete" -> {
                     val uriString = call.argument<String>("uri")
-                    val moveToTrash = call.argument<Boolean>("moveToTrash") ?: false
+                    val moveToTrash = call.argument<Boolean>("moveToTrash") ?: true
 
                     if (uriString != null) {
                         try {
                             val uri = Uri.parse(uriString)
-                            Log.d("MainActivity", "Acción sobre URI: $uri (moveToTrash=$moveToTrash)")
+                            val uris = listOf(uri)
 
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                // Android 11+ (API 30+): papelera o eliminación
-                                val uris = arrayListOf(uri)
-                                val pendingIntent = if (moveToTrash) {
-                                    Log.d("MainActivity", "Usando createTrashRequest")
+                            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                if (moveToTrash) {
                                     MediaStore.createTrashRequest(contentResolver, uris, true)
                                 } else {
-                                    Log.d("MainActivity", "Usando createDeleteRequest")
                                     MediaStore.createDeleteRequest(contentResolver, uris)
                                 }
-
-                                pendingResult = result
-                                startIntentSenderForResult(
-                                    pendingIntent.intentSender,
-                                    REQUEST_DELETE_PERMISSION,
-                                    null,
-                                    0,
-                                    0,
-                                    0
-                                )
-
                             } else {
-                                // Android 10 o menor: eliminación directa
-                                Log.d("MainActivity", "Borrado directo para Android < 11")
-                                val rows = contentResolver.delete(uri, null, null)
-                                result.success(rows > 0)
+                                contentResolver.delete(uri, null, null)
+                                result.success(true)
+                                return@setMethodCallHandler
                             }
+
+                            pendingResult = result
+                            startIntentSenderForResult(intent.intentSender, REQUEST_DELETE_PERMISSION, null, 0, 0, 0)
                         } catch (e: Exception) {
-                            Log.e("MainActivity", "Error al procesar URI: ${e.message}")
-                            result.error("DELETE_ERROR", e.message, null)
+                            result.error("DELETE_FAILED", e.message, null)
                         }
                     } else {
-                        result.error("NULL_URI", "Falta la URI", null)
+                        result.error("NULL_URI", "No URI provided", null)
                     }
-                } else {
-                    result.notImplemented()
                 }
+
+                "deleteMultiple" -> {
+                    val uriStrings = call.argument<List<String>>("uris")
+                    val moveToTrash = call.argument<Boolean>("moveToTrash") ?: true
+
+                    if (uriStrings != null) {
+                        val uris = uriStrings.map { Uri.parse(it) }
+
+                        try {
+                            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                if (moveToTrash) {
+                                    MediaStore.createTrashRequest(contentResolver, uris, true)
+                                } else {
+                                    MediaStore.createDeleteRequest(contentResolver, uris)
+                                }
+                            } else {
+                                uris.forEach { contentResolver.delete(it, null, null) }
+                                result.success(true)
+                                return@setMethodCallHandler
+                            }
+
+                            pendingResult = result
+                            startIntentSenderForResult(intent.intentSender, REQUEST_DELETE_PERMISSION, null, 0, 0, 0)
+                        } catch (e: Exception) {
+                            result.error("DELETE_MULTIPLE_FAILED", e.message, null)
+                        }
+                    } else {
+                        result.error("NULL_URIS", "No URIs provided", null)
+                    }
+                }
+
+                else -> result.notImplemented()
             }
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-
         if (requestCode == REQUEST_DELETE_PERMISSION) {
             val success = resultCode == RESULT_OK
-            Log.d("MainActivity", "Resultado de confirmación: $success")
             pendingResult?.success(success)
             pendingResult = null
         }

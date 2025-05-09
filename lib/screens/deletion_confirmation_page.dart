@@ -106,52 +106,47 @@ class _DeletionConfirmationPageState extends State<DeletionConfirmationPage> {
       return;
     }
 
-    List<String> failed = [];
-    int successCount = 0;
+    final uris = <String>[];
 
     for (var asset in widget.imagesToDelete) {
       try {
         final file = await asset.file;
         if (file == null) continue;
 
-        final uri = Uri.parse("content://media/external/images/media/${asset.id}");
-        final success = await _channel.invokeMethod<bool>('delete', {
-          'uri': uri.toString(),
-          'moveToTrash': true,
-        });
-
-        if (success == true) {
-          successCount++;
-        } else {
-          failed.add(asset.id);
-        }
+        final uri = "content://media/external/images/media/${asset.id}";
+        uris.add(uri);
       } catch (e) {
-        debugPrint("Error al eliminar ${asset.id}: $e");
-        failed.add(asset.id);
+        debugPrint("Error al preparar URI: $e");
       }
     }
 
-    await PhotoManager.clearFileCache();
+    try {
+      final success = await _channel.invokeMethod<bool>('deleteMultiple', {
+        'uris': uris,
+        'moveToTrash': true,
+      });
 
-    if (!mounted) return;
+      await PhotoManager.clearFileCache();
 
-    if (failed.isEmpty) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Se enviaron $successCount imágenes a la papelera"),
-          backgroundColor: Colors.green,
+          content: Text(success == true
+              ? "Imágenes enviadas a la papelera"
+              : "No se pudo completar la eliminación"),
+          backgroundColor: success == true ? Colors.green : Colors.red,
         ),
       );
-    } else {
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              "Se eliminaron $successCount imágenes. Fallaron: ${failed.length}"),
-          backgroundColor: Colors.orange,
-        ),
+        SnackBar(content: Text('Error al eliminar: $e')),
       );
+    } finally {
+      setState(() => _isDeleting = false);
+      Navigator.pop(context, true);
     }
-
-    Navigator.pop(context, successCount);
   }
 }
+
