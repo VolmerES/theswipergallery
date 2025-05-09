@@ -24,6 +24,8 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
   List<int> _years = [];
   bool _isLoading = true;
 
+  final Set<String> _seenAssetIds = {}; // Para evitar duplicados
+
   @override
   void initState() {
     super.initState();
@@ -43,37 +45,33 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
 
     final albums = await PhotoManager.getAssetPathList(
       type: RequestType.image,
-      filterOption:
-          FilterOptionGroup()..addOrderOption(
-            const OrderOption(type: OrderOptionType.createDate, asc: false),
-          ),
+      filterOption: FilterOptionGroup()
+        ..addOrderOption(
+          const OrderOption(type: OrderOptionType.createDate, asc: false),
+        ),
     );
 
     final Map<int, Map<int, List<AssetPathEntity>>> albumsByYearAndMonth = {};
 
     for (var album in albums) {
-      final assets = await album.getAssetListRange(start: 0, end: 1);
+      final assets = await album.getAssetListRange(start: 0, end: 10);
       if (assets.isEmpty) continue;
 
-      final DateTime? createDate = assets.first.createDateTime;
+      final uniqueAssets = assets.where((e) => _seenAssetIds.add(e.id)).toList();
+      if (uniqueAssets.isEmpty) continue;
+
+      final DateTime? createDate = uniqueAssets.first.createDateTime;
       if (createDate == null) continue;
 
       final year = createDate.year;
       final month = createDate.month;
 
-      if (!albumsByYearAndMonth.containsKey(year)) {
-        albumsByYearAndMonth[year] = {};
-      }
-
-      if (!albumsByYearAndMonth[year]!.containsKey(month)) {
-        albumsByYearAndMonth[year]![month] = [];
-      }
-
+      albumsByYearAndMonth.putIfAbsent(year, () => {});
+      albumsByYearAndMonth[year]!.putIfAbsent(month, () => []);
       albumsByYearAndMonth[year]![month]!.add(album);
     }
 
-    final years =
-        albumsByYearAndMonth.keys.toList()..sort((a, b) => b.compareTo(a));
+    final years = albumsByYearAndMonth.keys.toList()..sort((a, b) => b.compareTo(a));
 
     setState(() {
       _albumsByYearAndMonth = albumsByYearAndMonth;
@@ -90,7 +88,12 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
 
   void _openAlbum(BuildContext context, AssetPathEntity album) async {
     final count = await album.assetCountAsync;
-    final images = await album.getAssetListRange(start: 0, end: count);
+    final rawImages = await album.getAssetListRange(start: 0, end: count);
+    final images = {
+      for (var asset in rawImages)
+        if (_seenAssetIds.add(asset.id)) asset.id: asset,
+    }.values.toList();
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -125,9 +128,8 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
       }
       currentIndex++;
 
-      final months =
-          _albumsByYearAndMonth[year]!.keys.toList()
-            ..sort((a, b) => b.compareTo(a));
+      final months = _albumsByYearAndMonth[year]!.keys.toList()
+        ..sort((a, b) => b.compareTo(a));
 
       for (var month in months) {
         if (currentIndex == index) {
@@ -211,8 +213,7 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
                               subtitle: FutureBuilder<int>(
                                 future: _getAssetCount(album),
                                 builder: (context, countSnapshot) {
-                                  if (countSnapshot.connectionState ==
-                                          ConnectionState.done &&
+                                  if (countSnapshot.connectionState == ConnectionState.done &&
                                       countSnapshot.hasData) {
                                     return Text("${countSnapshot.data} fotos");
                                   } else {
@@ -224,12 +225,11 @@ class _SelectAlbumScreenState extends State<SelectAlbumScreen> {
                                 },
                               ),
                             ),
-                            child:
-                                thumb != null
-                                    ? Image.memory(thumb, fit: BoxFit.cover)
-                                    : const Center(
-                                      child: Icon(Icons.photo_album, size: 48),
-                                    ),
+                            child: thumb != null
+                                ? Image.memory(thumb, fit: BoxFit.cover)
+                                : const Center(
+                                    child: Icon(Icons.photo_album, size: 48),
+                                  ),
                           ),
                         );
                       },

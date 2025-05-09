@@ -13,6 +13,7 @@ class SelectMonthScreen extends StatefulWidget {
 class _SelectMonthScreenState extends State<SelectMonthScreen> {
   final Map<String, List<AssetEntity>> _imagesByMonth = {};
   final Map<String, AssetEntity> _thumbnailPerMonth = {};
+  final Set<String> _seenAssetIds = {}; // Para evitar duplicados
   bool _isLoading = true;
 
   @override
@@ -38,22 +39,20 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
       return;
     }
 
-    // Increase size to load more images
-    final allImages = await albums.first.getAssetListPaged(
+    final rawImages = await albums.first.getAssetListPaged(
       page: 0,
       size: 10000,
     );
 
-    // Use a map to store month/year as keys but with proper sorting ability
+    final uniqueImages = rawImages.where((e) => _seenAssetIds.add(e.id)).toList();
+
     final monthYearMap = <String, Map<String, dynamic>>{};
 
-    for (var image in allImages) {
+    for (var image in uniqueImages) {
       final date = image.createDateTime;
       final displayKey = "${_monthName(date.month)} ${date.year}";
-      // Create a sortable key in format YYYYMM
       final sortKey = "${date.year}${date.month.toString().padLeft(2, '0')}";
 
-      // Initialize if this is the first image for this month
       if (!monthYearMap.containsKey(sortKey)) {
         monthYearMap[sortKey] = {
           'displayKey': displayKey,
@@ -64,11 +63,8 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
       monthYearMap[sortKey]!['images']!.add(image);
     }
 
-    // Sort keys by date (newest first)
-    final sortedKeys =
-        monthYearMap.keys.toList()..sort((a, b) => b.compareTo(a));
+    final sortedKeys = monthYearMap.keys.toList()..sort((a, b) => b.compareTo(a));
 
-    // Now populate our maps with the sorted data
     for (var sortKey in sortedKeys) {
       final data = monthYearMap[sortKey]!;
       final displayKey = data['displayKey'];
@@ -130,17 +126,13 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
     }
 
     final keys = _imagesByMonth.keys.toList();
-    // Group months by years
     final yearGroups = <String, List<String>>{};
     for (final key in keys) {
       final year = key.split(" ").last;
       yearGroups.putIfAbsent(year, () => []).add(key);
     }
 
-    // Sort years in descending order
-    final years =
-        yearGroups.keys.toList()
-          ..sort((a, b) => int.parse(b).compareTo(int.parse(a)));
+    final years = yearGroups.keys.toList()..sort((a, b) => int.parse(b).compareTo(int.parse(a)));
 
     return Scaffold(
       appBar: AppBar(title: const Text("Selecciona un mes")),
@@ -154,7 +146,6 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Year separator (not for the first year)
               if (yearIndex > 0)
                 Container(
                   margin: const EdgeInsets.only(top: 16, bottom: 8),
@@ -163,8 +154,6 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
-
-              // Year header
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Text(
@@ -176,8 +165,6 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
                   ),
                 ),
               ),
-
-              // Grid of months for this year
               GridView.builder(
                 physics: const NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
@@ -204,9 +191,7 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder:
-                                  (_) =>
-                                      ReviewGalleryPage(initialImages: images),
+                              builder: (_) => ReviewGalleryPage(initialImages: images),
                             ),
                           );
                         },
@@ -216,12 +201,9 @@ class _SelectMonthScreenState extends State<SelectMonthScreen> {
                             title: Text(key),
                             subtitle: Text("${images.length} fotos"),
                           ),
-                          child:
-                              thumb != null
-                                  ? Image.memory(thumb, fit: BoxFit.cover)
-                                  : const Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
+                          child: thumb != null
+                              ? Image.memory(thumb, fit: BoxFit.cover)
+                              : const Center(child: CircularProgressIndicator()),
                         ),
                       );
                     },
